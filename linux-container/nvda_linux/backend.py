@@ -51,9 +51,13 @@ QUICK_KEYS = {
 	"e": "entry",
 	"p": "paragraph",
 }
+LIVE_REGION_ROLES = {"alert", "log", "marquee", "notification", "status", "timer"}
+LIVE_REGION_ATTRIBUTES = {"live", "container-live"}
 
 
-def live_region_text(event_type: str, any_data: object) -> str:
+def live_region_text(event_type: str, any_data: object, *, is_live_region: bool = False) -> str:
+	if event_type == "object:text-changed:insert" and not is_live_region:
+		return ""
 	if event_type not in {"object:announcement", "object:text-changed:insert"}:
 		return ""
 	return " ".join(str(any_data or "").split())
@@ -133,7 +137,11 @@ class LinuxNvdaScreenReader:
 			if event.type == "object:state-changed:focused" and not event.detail1:
 				return
 			if event.type in {"object:announcement", "object:text-changed:insert"}:
-				announcement = live_region_text(event.type, event.any_data)
+				announcement = live_region_text(
+					event.type,
+					event.any_data,
+					is_live_region=self._is_live_region(event.source),
+				)
 				if announcement:
 					self._writer.speak(announcement, "NVDA.liveRegion")
 				return
@@ -327,6 +335,20 @@ class LinuxNvdaScreenReader:
 				if state_set.contains(state_type):
 					states.add(state_name)
 		return AccessibleSnapshot(role, str(name or ""), str(text or ""), dict(attributes), frozenset(states))
+
+	def _is_live_region(self, node: Any | None) -> bool:
+		visited = 0
+		while node is not None and visited < 100:
+			visited += 1
+			if self._role(node) in LIVE_REGION_ROLES:
+				return True
+			attributes = self._safe(lambda: Atspi.Accessible.get_attributes(node), {}) or {}
+			for name in LIVE_REGION_ATTRIBUTES:
+				value = str(attributes.get(name, "")).strip().lower()
+				if value not in {"", "false", "none", "off"}:
+					return True
+			node = self._safe(lambda: Atspi.Accessible.get_parent(node), None)
+		return False
 
 	@staticmethod
 	def _role(node: Any) -> str:

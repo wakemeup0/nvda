@@ -11,7 +11,19 @@ class NavigationTests(unittest.TestCase):
 
 	def test_chromium_text_insert_is_a_live_presentation_candidate(self):
 		self.assertEqual(
-			live_region_text("object:text-changed:insert", " Order  review ready "),
+			live_region_text(
+				"object:text-changed:insert",
+				" Order  review ready ",
+				is_live_region=True,
+			),
 			"Order review ready",
+		)
+		self.assertEqual(
+			live_region_text("object:text-changed:insert", "ordinary DOM mutation"),
+			"",
+		)
+		self.assertEqual(
+			live_region_text("object:announcement", "assertive announcement"),
+			"assertive announcement",
 		)
 		self.assertEqual(live_region_text("object:state-changed:focused", "ignored"), "")
