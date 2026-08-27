@@ -21,6 +21,7 @@ class PresentationWriter:
 		self._path = path
 		self._lock = threading.Lock()
 		self._sequence = 0
+		self._clock_origin_ns = time.monotonic_ns()
 		path.parent.mkdir(parents=True, exist_ok=True)
 		path.touch(mode=0o600, exist_ok=True)
 
@@ -32,7 +33,7 @@ class PresentationWriter:
 			self._sequence += 1
 			record = {
 				"sequence": self._sequence,
-				"monotonicNs": time.monotonic_ns(),
+				"monotonicNs": time.monotonic_ns() - self._clock_origin_ns,
 				"kind": "speech",
 				"text": clean,
 				"command": command,
