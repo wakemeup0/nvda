@@ -11,7 +11,7 @@ import gi
 
 gi.require_version("Atspi", "2.0")
 gi.require_version("Gdk", "3.0")
-from gi.repository import Atspi, Gdk, GLib  # noqa: E402
+from gi.repository import Atspi, Gdk, Gio, GLib  # noqa: E402
 
 from .events import PresentationWriter  # noqa: E402
 from .presentation import AccessibleSnapshot, present  # noqa: E402
@@ -53,10 +53,48 @@ QUICK_KEYS = {
 }
 
 
+def ensure_accessibility_enabled() -> None:
+	"""Enable AT-SPI before accessible applications start.
+
+	AT-SPI's session service defaults to disabled outside a desktop session.
+	Orca performs the same org.a11y.Status update during startup. Without it,
+	Chromium does not register an accessibility tree even when its renderer
+	accessibility feature is forced on.
+	"""
+	proxy = Gio.DBusProxy.new_for_bus_sync(
+		Gio.BusType.SESSION,
+		Gio.DBusProxyFlags.NONE,
+		None,
+		"org.a11y.Bus",
+		"/org/a11y/bus",
+		"org.freedesktop.DBus.Properties",
+		None,
+	)
+	result = proxy.call_sync(
+		"Get",
+		GLib.Variant("(ss)", ("org.a11y.Status", "IsEnabled")),
+		Gio.DBusCallFlags.NONE,
+		-1,
+		None,
+	)
+	if not result.unpack()[0]:
+		proxy.call_sync(
+			"Set",
+			GLib.Variant(
+				"(ssv)",
+				("org.a11y.Status", "IsEnabled", GLib.Variant("b", True)),
+			),
+			Gio.DBusCallFlags.NONE,
+			-1,
+			None,
+		)
+
+
 class LinuxNvdaScreenReader:
 	"""Screen reader using NVDA gestures and an AT-SPI accessibility backend."""
 
 	def __init__(self, events_path: Path) -> None:
+		ensure_accessibility_enabled()
 		self._writer = PresentationWriter(events_path)
 		self._current: Any | None = None
 		self._browse_mode = True
