@@ -53,6 +53,17 @@ QUICK_KEYS = {
 }
 
 
+def live_region_text(event_type: str, any_data: object) -> str:
+	if event_type not in {"object:announcement", "object:text-changed:insert"}:
+		return ""
+	return " ".join(str(any_data or "").split())
+
+
+def relative_index(length: int, current_index: int, direction: int) -> int | None:
+	next_index = current_index + direction
+	return next_index if 0 <= next_index < length else None
+
+
 def ensure_accessibility_enabled() -> None:
 	"""Enable AT-SPI before accessible applications start.
 
@@ -106,6 +117,7 @@ class LinuxNvdaScreenReader:
 		for event_type in (
 			"document:load-complete",
 			"object:announcement",
+			"object:text-changed:insert",
 			"object:state-changed:checked",
 			"object:state-changed:expanded",
 			"object:state-changed:focused",
@@ -120,8 +132,8 @@ class LinuxNvdaScreenReader:
 		try:
 			if event.type == "object:state-changed:focused" and not event.detail1:
 				return
-			if event.type == "object:announcement":
-				announcement = str(event.any_data or "")
+			if event.type in {"object:announcement", "object:text-changed:insert"}:
+				announcement = live_region_text(event.type, event.any_data)
 				if announcement:
 					self._writer.speak(announcement, "NVDA.liveRegion")
 				return
@@ -193,7 +205,9 @@ class LinuxNvdaScreenReader:
 			self._writer.speak("no browse mode document", "NVDA.error")
 			return
 		nodes = [node for node in self._walk(document) if self._role(node) in STRUCTURAL_ROLES[kind]]
-		self._select_relative(nodes, -1 if backward else 1, f"no {kind}")
+		direction = -1 if backward else 1
+		boundary = "previous" if backward else "next"
+		self._select_relative(nodes, direction, f"no {boundary} {kind}")
 
 	def _move_linear(self, direction: int) -> None:
 		document = self._document()
@@ -209,7 +223,10 @@ class LinuxNvdaScreenReader:
 		index = self._identity_index(nodes, self._current)
 		if index is None:
 			index = len(nodes) if direction < 0 else -1
-		next_index = (index + direction) % len(nodes)
+		next_index = relative_index(len(nodes), index, direction)
+		if next_index is None:
+			self._writer.speak(empty_message, "NVDA.browseMode")
+			return
 		self._current = nodes[next_index]
 		self._character_offset = 0
 		self._present(self._current)
@@ -240,7 +257,7 @@ class LinuxNvdaScreenReader:
 			count = Atspi.Action.get_n_actions(self._current)
 			if count > 0 and Atspi.Action.do_action(self._current, 0):
 				return True
-		except GLib.Error:
+		except (GLib.Error, TypeError):
 			pass
 		return False
 
@@ -292,7 +309,7 @@ class LinuxNvdaScreenReader:
 			length = Atspi.Text.get_character_count(node)
 			if 0 < length <= 10_000:
 				text = Atspi.Text.get_text(node, 0, length)
-		except GLib.Error:
+		except (GLib.Error, TypeError):
 			pass
 		states: set[str] = set()
 		state_set = self._safe(lambda: Atspi.Accessible.get_state_set(node), None)
@@ -315,7 +332,7 @@ class LinuxNvdaScreenReader:
 	def _role(node: Any) -> str:
 		try:
 			return str(Atspi.Accessible.get_role_name(node)).lower()
-		except GLib.Error:
+		except (GLib.Error, TypeError):
 			return ""
 
 	def _is_presentable(self, node: Any) -> bool:
@@ -335,7 +352,7 @@ class LinuxNvdaScreenReader:
 	def _safe(operation, fallback):
 		try:
 			return operation()
-		except GLib.Error:
+		except (GLib.Error, TypeError):
 			return fallback
 
 	@staticmethod
