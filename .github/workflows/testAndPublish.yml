@@ -31,8 +31,11 @@ env:
   VSCMD_SKIP_SENDTELEMETRY: 1
   # Cache details about available MSVC tooling for subsequent SCons invocations to the provided file.
   SCONS_CACHE_MSVC_CONFIG: ".scons_msvc_cache.json"
-  defaultRunner: 'windows-2025'
-  supportedRunners: '["windows-2022", "windows-2025"]'
+  # windows-2025 no longer carries the Visual Studio Clang component required
+  # by the release-2026.1.1 SCons toolchain. Keep this stable fork reproducible
+  # on the runner that still supplies the upstream-required component.
+  defaultRunner: 'windows-2022'
+  supportedRunners: '["windows-2022"]'
   defaultArch: x64
   supportedArchitectures: '["x64"]'
   defaultPythonVersion: '3.13.12'
