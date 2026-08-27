@@ -12,6 +12,7 @@ synthesizer. It never changes speech or inspects a browser accessibility tree.
 
 import os
 import threading
+import time
 from typing import Any
 
 import globalPluginHandler
@@ -60,6 +61,7 @@ class GlobalPlugin(globalPluginHandler.GlobalPlugin):
 			text="".join(textParts),
 			commandTypes=commandTypes,
 			priority=priorityName if isinstance(priorityName, str) else str(priority or ""),
+			monotonicNs=time.monotonic_ns(),
 		)
 
 	def _onSpeechCanceled(self, **_kwargs):
